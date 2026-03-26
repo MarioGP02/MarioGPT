@@ -3,7 +3,7 @@ from groq import Groq
 
 # 1. Configuración de la página
 st.set_page_config(page_title="MarioGPT", page_icon="🤖")
-st.title("🤖 MarioGPT: Experto en Montequinto")
+st.title("🤖 MarioGPT con Llama 3.1 8b instant")
 
 # 2. Inicializar el cliente (Asegúrate de tener GROQ_API_KEY en los Secrets de Streamlit)
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
@@ -18,7 +18,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # 5. Input del usuario
-if prompt := st.chat_input("Pregúntame por sitios en Montequinto..."):
+if prompt := st.chat_input("En que puedo ayudarte hoy?"):
     # Guardar y mostrar mensaje del usuario
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -29,7 +29,7 @@ if prompt := st.chat_input("Pregúntame por sitios en Montequinto..."):
         try:
             # Preparamos los mensajes con el System Prompt
             messages_to_send = [
-                {"role": "system", "content": "Eres MarioGPT, un asistente inteligente experto en Montequinto, Sevilla. Responde siempre de forma amigable y en español."}
+                {"role": "system", "content": "Eres MarioGPT, un asistente inteligente. Responde siempre de forma amigable y en español."}
             ] + [
                 {"role": m["role"], "content": m["content"]} for m in st.session_state.messages
             ]
