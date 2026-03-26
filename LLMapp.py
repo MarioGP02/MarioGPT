@@ -27,7 +27,7 @@ if prompt := st.chat_input("¿En qué puedo ayudarte?"):
     with st.chat_message("assistant"):
         stream = client.chat.completions.create(
             messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-            model="llama3-8b-8192", # Modelo potente y rápido
+            model="llama-3.3-70b-versatile", # Modelo potente y rápido
             stream=True,
         )
         response = st.write_stream(stream)
