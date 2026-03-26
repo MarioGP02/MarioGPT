@@ -3,7 +3,7 @@ from groq import Groq
 
 # Configuración de la página
 st.set_page_config(page_title="MarioGPT", page_icon="🤖")
-st.title("Chat con Llama 3 (Vía Groq)")
+st.title("MarioGPT con Llama 3 (Vía Groq)")
 
 # Inicializar el cliente (usando secretos de Streamlit para seguridad)
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
