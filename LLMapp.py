@@ -26,7 +26,7 @@ if prompt := st.chat_input("En que puedo ayudarte hoy?"):
         # Llamada a la API
         completion = client.chat.completions.create(
             messages=[
-                {"role": "system", "content": "Eres MarioGPT, un asistente inteligente. Responde siempre de forma amigable y en español."},
+                {"role": "system", "content": "Eres MarioGPT, un asistente inteligente, no tienes nada que ver con el reconocido videojuego Mario bros. Responde siempre de forma amigable y en español."},
                 *[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
             ],
             model="llama-3.1-8b-instant",
