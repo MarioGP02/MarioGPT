@@ -2,6 +2,7 @@ import streamlit as st
 from groq import Groq
 import PyPDF2
 from supabase_utils import *
+from talivy_utils import *
 
 st.set_page_config(page_title="MarioGPT", page_icon="🤖")
 st.title("🤖 MarioGPT con Llama 3.1 8b instant")
@@ -61,6 +62,27 @@ if "last_user_id" not in st.session_state or st.session_state.last_user_id != st
     st.session_state.messages = load_messages(st.session_state.user.id)
     st.session_state.last_user_id = st.session_state.user.id
     st.session_state.messages_loaded = True
+
+
+# Diccionario de modelos disponibles en Groq
+modelos_disponibles = {
+    "Llama 3.3 (El más inteligente)": "llama-3.3-70b-versatile",
+    "Llama 3.1 (Rápido y eficaz)": "llama-3.1-8b-instant",
+    "Mixtral 8x7b (Equilibrado)": "mixtral-8x7b-32768"
+}
+
+st.sidebar.divider()
+st.sidebar.subheader("🤖 Configuración del Modelo")
+
+# El usuario elige el nombre amigable
+modelo_nombre = st.sidebar.selectbox(
+    "Selecciona el modelo LLM:",
+    options=list(modelos_disponibles.keys()),
+    index=0 # Por defecto el primero
+)
+
+# Obtenemos el ID técnico para la API
+modelo_actual = modelos_disponibles[modelo_nombre]
 
 # --- SIDEBAR ARCHIVOS ---
 with st.sidebar:
@@ -125,6 +147,17 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
             base_system_prompt += f"\n\n{st.session_state.file_context}"
 
         try:
+            # 1. EJECUTAR LA BÚSQUEDA (Aquí usas tu función)
+            with st.status("🌐 Buscando información actualizada...", expanded=False) as status:
+                informacion_web = buscar_en_internet(prompt) # 👈 Llamas a tu función
+                status.update(label="✅ Información web obtenida", state="complete")
+
+            # 2. PREPARAR LOS MENSAJES (El "Contexto")
+            # Empezamos con el prompt de sistema y la info de internet
+            messages_to_send = [
+                {"role": "system", "content": base_system_prompt},
+                {"role": "system", "content": f"DATOS DE INTERNET ACTUALIZADOS:\n{informacion_web}"}
+            ]
             # 🔥 FILTRAR MENSAJES ANTES DE ENVIAR
             valid_messages = [
                 {"role": m["role"], "content": m["content"]}
@@ -147,8 +180,8 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
 
             # 3. Enviamos la variable correcta a Groq
             completion = client.chat.completions.create(
-                messages=messages_to_send, # 👈 AHORA SÍ ENVIAMOS EL CONTEXTO CORRECTO
-                model="llama-3.1-8b-instant",
+                messages=messages_to_send, #AHORA SÍ ENVIAMOS EL CONTEXTO CORRECTO
+                model=modelo_actual, # El modelo seleccionado dinámicamente
                 stream=True,
             )
 
