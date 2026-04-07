@@ -36,4 +36,12 @@ def load_messages(user_id):
         .order("created_at") \
         .execute()
 
-    return res.data if res.data else []
+    # 🔥 FILTRO CLAVE
+    clean_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in res.data
+        if m["content"] is not None and m["content"] != ""
+    ]
+
+    return clean_messages
+

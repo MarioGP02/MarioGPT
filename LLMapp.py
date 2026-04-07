@@ -37,6 +37,9 @@ elif mode == "Login":
 if st.session_state.user:
     if st.sidebar.button("Cerrar sesión"):
         st.session_state.user = None
+        st.session_state.messages = []
+        if "messages_loaded" in st.session_state:
+            del st.session_state.messages_loaded
 
 # Bloquear acceso
 if not st.session_state.user:
@@ -54,8 +57,9 @@ if "file_context" not in st.session_state:
     st.session_state.file_context = ""
 
 # --- CARGAR HISTORIAL ---
-if "messages_loaded" not in st.session_state:
+if "last_user_id" not in st.session_state or st.session_state.last_user_id != st.session_state.user.id:
     st.session_state.messages = load_messages(st.session_state.user.id)
+    st.session_state.last_user_id = st.session_state.user.id
     st.session_state.messages_loaded = True
 
 # --- SIDEBAR ARCHIVOS ---
@@ -88,11 +92,13 @@ for message in st.session_state.messages:
 if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
 
     # USER
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    save_message(st.session_state.user.id, "user", prompt)
+    if prompt and prompt.strip():
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        save_message(st.session_state.user.id, "user", prompt)
 
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    if prompt and prompt.strip():
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
     # ASSISTANT
     with st.chat_message("assistant"):
@@ -119,10 +125,17 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
             base_system_prompt += f"\n\n{st.session_state.file_context}"
 
         try:
+            # 🔥 FILTRAR MENSAJES ANTES DE ENVIAR
+            valid_messages = [
+                {"role": m["role"], "content": m["content"]}
+                for m in st.session_state.messages
+                if m["content"] and m["content"].strip() != ""
+            ]
+
             completion = client.chat.completions.create(
                 messages=[
-                    {"role": "system", "content": base_system_prompt},
-                    *[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+                {"role": "system", "content": base_system_prompt},
+                *valid_messages
                 ],
                 model="llama-3.1-8b-instant",
                 stream=True,
@@ -137,8 +150,9 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
             response_placeholder.markdown(full_response)
 
             # GUARDAR RESPUESTA
-            st.session_state.messages.append({"role": "assistant", "content": full_response})
-            save_message(st.session_state.user.id, "assistant", full_response)
+            if full_response and full_response.strip():
+                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                save_message(st.session_state.user.id, "assistant", full_response)
 
         except Exception as e:
             error_msg = f"Error: {e}"
