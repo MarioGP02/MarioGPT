@@ -132,20 +132,22 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
                 if m["content"] and m["content"].strip() != ""
             ]
 
+            # 1. Preparamos una lista única para enviar a la API
+            messages_to_send = [
+                {"role": "system", "content": base_system_prompt}
+            ]
+
+            # 2. Aplicamos la lógica del límite de memoria (ej. 30 mensajes)
             if len(valid_messages) > 30:
-                resumen = "Resumen: el usuario ha estado hablando sobre X..."
+                resumen = "Resumen: el usuario ha estado hablando sobre diversos temas en el pasado."
+                messages_to_send.append({"role": "system", "content": resumen})
+                messages_to_send.extend(valid_messages[-30:]) # Solo recordamos los últimos 30
+            else:
+                messages_to_send.extend(valid_messages) # Recordamos todo el historial corto
 
-                messages_for_llm = [
-                    {"role": "system", "content": base_system_prompt},
-                    {"role": "system", "content": resumen},
-                    *valid_messages[-30:]
-                ]
-
+            # 3. Enviamos la variable correcta a Groq
             completion = client.chat.completions.create(
-                messages=[
-                {"role": "system", "content": base_system_prompt},
-                *valid_messages
-                ],
+                messages=messages_to_send, # 👈 AHORA SÍ ENVIAMOS EL CONTEXTO CORRECTO
                 model="llama-3.1-8b-instant",
                 stream=True,
             )
