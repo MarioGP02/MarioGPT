@@ -135,7 +135,7 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
                     - Usa ejemplos
                     - Sé claro y práctico
                     - Evita respuestas largas innecesarias si el usuario no lo pide
-                    - Si no conoces la respuesta, admítelo de forma honesta y ofrece buscar información adicional en internet (aunque no puedas hacerlo realmente)
+                    - Si no conoces la respuesta, admítelo de forma honesta
 
                     Responde siempre:
                     - De forma amigable
@@ -166,9 +166,9 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
             ]
 
             # 1. Preparamos una lista única para enviar a la API
-            messages_to_send = [
-                {"role": "system", "content": base_system_prompt}
-            ]
+            #messages_to_send = [
+            #    {"role": "system", "content": base_system_prompt}
+            #]
 
             # 2. Aplicamos la lógica del límite de memoria (ej. 30 mensajes)
             if len(valid_messages) > 30:
