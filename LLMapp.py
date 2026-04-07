@@ -2,7 +2,7 @@ import streamlit as st
 from groq import Groq
 import PyPDF2
 from supabase_utils import *
-from talivy_utils import *
+from tavily_utils import *
 
 st.set_page_config(page_title="MarioGPT", page_icon="🤖")
 st.title("🤖 MarioGPT con Llama 3.1 8b instant")
