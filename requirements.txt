@@ -2,4 +2,4 @@ streamlit
 groq
 PyPDF2
 Supabase
-Talivy
+Tavily
