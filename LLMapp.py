@@ -132,6 +132,15 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
                 if m["content"] and m["content"].strip() != ""
             ]
 
+            if len(valid_messages) > 30:
+                resumen = "Resumen: el usuario ha estado hablando sobre X..."
+
+                messages_for_llm = [
+                    {"role": "system", "content": base_system_prompt},
+                    {"role": "system", "content": resumen},
+                    *valid_messages[-30:]
+                ]
+
             completion = client.chat.completions.create(
                 messages=[
                 {"role": "system", "content": base_system_prompt},
@@ -149,6 +158,10 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
 
             response_placeholder.markdown(full_response)
 
+            #Mostrar contexto
+            st.write(len(valid_messages))
+            st.write(valid_messages[:2])  # primeros mensajes
+            st.write(valid_messages[-2:]) # últimos mensajes
             # GUARDAR RESPUESTA
             if full_response and full_response.strip():
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
