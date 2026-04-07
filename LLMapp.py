@@ -1,9 +1,52 @@
 import streamlit as st
 from groq import Groq
 import PyPDF2
+from supabase_utils import *
 
 st.set_page_config(page_title="MarioGPT", page_icon="🤖")
 st.title("🤖 MarioGPT con Llama 3.1 8b instant")
+
+# --- 0.Loggin y Registro de Usuarios ---
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+st.sidebar.title("🔐 Cuenta")
+
+mode = st.sidebar.selectbox("Acceso", ["Login", "Registro"])
+
+email = st.sidebar.text_input("Email")
+password = st.sidebar.text_input("Contraseña", type="password")
+
+if mode == "Registro":
+    if st.sidebar.button("Crear cuenta"):
+        res = register(email, password)
+        if res.user:
+            st.sidebar.success("Cuenta creada")
+        else:
+            st.sidebar.error("Error")
+
+elif mode == "Login":
+    if st.sidebar.button("Entrar"):
+        res = login(email, password)
+        if res.user:
+            st.session_state.user = res.user
+            st.sidebar.success("Login correcto")
+        else:
+            st.sidebar.error("Credenciales incorrectas")
+
+# Logout
+if st.session_state.user:
+    if st.sidebar.button("Cerrar sesión"):
+        st.session_state.user = None
+
+if not st.session_state.user:
+    st.warning("🔒 Inicia sesión")
+    st.stop()
+
+
+if "messages_loaded" not in st.session_state:
+    st.session_state.messages = load_messages(st.session_state.user.id)
+    st.session_state.messages_loaded = True
 
 # --- 1. Inicialización del Cliente ---
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
@@ -113,3 +156,13 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
             error_msg = f"Lo siento, hubo un problema al conectar con mi cerebro (API Error: {e})"
             response_placeholder.error(error_msg)
             st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+st.session_state.messages.append({"role": "user", "content": prompt})
+save_message(st.session_state.user.id, "user", prompt)
+
+st.session_state.messages.append({"role": "assistant", "content": full_response})
+save_message(st.session_state.user.id, "assistant", full_response)
+
+if "messages_loaded" in st.session_state and not st.session_state.user:
+    st.session_state.messages = []
+    del st.session_state.messages_loaded
