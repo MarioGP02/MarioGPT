@@ -1,9 +1,15 @@
 import streamlit as st
 import requests
+import time
 
-# URL del modelo FLUX.1 [schnell] (es uno de los mejores actualmente)
-API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
+# URL actualizada
+API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
 headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}"}
+
+def pedir_imagen_a_api(prompt):
+    """Hace la petición simple y devuelve la respuesta pura"""
+    response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    return response
 
 def generar_imagen(prompt):
     payload = {"inputs": prompt}

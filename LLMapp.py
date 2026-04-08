@@ -170,25 +170,40 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
 
         try:
             if modelo_actual == "generador_imagenes":
-            # --- CASO A: GENERAR IMAGEN (Hugging Face) ---
-                with st.status("🎨 Dibujando tu imagen con FLUX.1...", expanded=True) as status:
-                    try:
-                        imagen_bytes = generar_imagen(prompt) # Llamamos a la función
-                    
-                        # Convertimos bytes a imagen de PIL para mostrarla
-                        imagen_pil = Image.open(io.BytesIO(imagen_bytes))
-                    
-                        # Mostramos la imagen directamente en el chat
-                        st.image(imagen_pil, caption=f"Imagen generada para: '{prompt}'", use_container_width=True)
-                    
-                        status.update(label="✅ Imagen generada correctamente", state="complete")
-                    
-                        # Guardamos un mensaje especial en el historial (o los bytes codificados, pero ocupa mucho)
-                        full_response = f"[Imagen generada para: {prompt}]"
+                with st.status("🎨 Preparando pinceles...", expanded=True) as status:
+                    intentos = 0
+                    max_intentos = 15 # Máximo de reintentos (aprox 1-2 minutos total)
+                    exito = False
+                
+                    while intentos < max_intentos and not exito:
+                        res = pedir_imagen_a_api(prompt)
+                        content_type = res.headers.get("content-type", "")
 
-                    except Exception as img_e:
-                        st.error(f"Hubo un error con la API de imágenes. Puede que esté saturada: {img_e}")
-                        full_response = "Error al generar la imagen."
+                        if "image" in content_type:
+                            # ¡ÉXITO! Tenemos la imagen
+                            st.image(res.content, caption=f"MarioGPT generó: {prompt}", use_container_width=True)
+                            status.update(label="✅ ¡Imagen terminada!", state="complete")
+                            full_response = f"He terminado tu imagen de: '{prompt}'"
+                            exito = True
+                        else:
+                            # EL MODELO ESTÁ CARGANDO O HAY ERROR
+                            try:
+                                error_data = res.json()
+                                if "estimated_time" in error_data:
+                                    tiempo_espera = error_data["estimated_time"]
+                                    status.update(label=f"⏳ El modelo está despertando... (Espera {round(tiempo_espera)}s)", state="running")
+                                    # Esperamos 10 segundos antes de reintentar para no saturar
+                                    time.sleep(10)
+                                    intentos += 1
+                                else:
+                                    raise Exception(error_data.get("error", "Error desconocido"))
+                            except:
+                                status.update(label="❌ Error en la API", state="error")
+                                break
+                
+                if not exito:
+                    st.error("Lo siento, el modelo tardó demasiado en responder. Prueba de nuevo en unos segundos.")
+                    full_response = "Error por tiempo de espera agotado."
 
             else:
 
