@@ -67,8 +67,7 @@ if "last_user_id" not in st.session_state or st.session_state.last_user_id != st
 # Diccionario de modelos disponibles en Groq
 modelos_disponibles = {
     "Llama 3.3 (El más inteligente)": "llama-3.3-70b-versatile",
-    "Llama 3.1 (Rápido y eficaz)": "llama-3.1-8b-instant",
-    "Mixtral 8x7b (Equilibrado)": "mixtral-8x7b-32768"
+    "Llama 3.1 (Rápido y eficaz)": "llama-3.1-8b-instant"
 }
 
 st.sidebar.divider()
