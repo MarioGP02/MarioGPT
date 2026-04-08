@@ -1,10 +1,7 @@
-# --- EN UN ARCHIVO DE UTILIDADES (ej. image_utils.py) ---
 import streamlit as st
 import requests
-import io
-from PIL import Image
 
-# Usamos FLUX.1-schnell, que es el modelo gratuito más rápido y potente actualmente
+# URL del modelo FLUX.1 [schnell] (es uno de los mejores actualmente)
 API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
 headers = {"Authorization": f"Bearer {st.secrets['HUGGINGFACE_API_KEY']}"}
 
@@ -12,8 +9,19 @@ def generar_imagen(prompt):
     payload = {"inputs": prompt}
     response = requests.post(API_URL, headers=headers, json=payload)
     
-    # Si la API está cargando el modelo, Hugging Face devuelve un JSON con el tiempo estimado
-    if response.status_type != "image/png" and response.status_type != "image/jpeg":
-        raise Exception(f"La API está cargando o hubo un error: {response.text}")
+    # --- LA CORRECCIÓN ESTÁ AQUÍ ---
+    # Revisamos el 'content-type' en los headers
+    content_type = response.headers.get("content-type", "")
+    
+    if "image" not in content_type:
+        # Si no es una imagen, es que Hugging Face nos ha mandado un JSON con un error o aviso
+        error_info = response.json()
         
-    return response.content # Devuelve los bytes de la imagen
+        # A veces el modelo está cargando ("loading"), podemos dar un mensaje más específico
+        if "estimated_time" in error_info:
+            tiempo = round(error_info["estimated_time"], 1)
+            raise Exception(f"El modelo se está despertando. Estará listo en unos {tiempo} segundos. ¡Inténtalo de nuevo ahora!")
+        
+        raise Exception(f"Error de la API: {error_info.get('error', 'Desconocido')}")
+        
+    return response.content # Si todo está bien, devuelve los bytes de la imagen
