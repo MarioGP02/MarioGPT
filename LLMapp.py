@@ -1,8 +1,12 @@
 import streamlit as st
 from groq import Groq
 import PyPDF2
+import io
+from PIL import Image
+import requests
 from supabase_utils import *
 from tavily_utils import *
+from imagenes_utils import *
 
 st.set_page_config(page_title="MarioGPT", page_icon="🤖")
 st.title("🤖 MarioGPT con Llama 3.1 8b instant")
@@ -66,8 +70,18 @@ if "last_user_id" not in st.session_state or st.session_state.last_user_id != st
 
 # Diccionario de modelos disponibles en Groq
 modelos_disponibles = {
-    "Llama 3.3 (El más inteligente)": "llama-3.3-70b-versatile",
-    "Llama 3.1 (Rápido y eficaz)": "llama-3.1-8b-instant"
+    # 📝 --- MODELOS DE TEXTO PÚRO Y RAZONAMIENTO ---
+    "Llama 3.3 70B (Máxima Inteligencia)": "llama-3.3-70b-versatile",
+    "Llama 3.1 8B (Rápido y eficaz)": "llama-3.1-8b-instant",
+    "Mixtral 8x7B (Equilibrado/Contexto largo)": "mixtral-8x7b-32768",
+    "Gemma 2 9B (Modelo de Google)": "gemma2-9b-it",
+    
+    # 👁️ --- MODELOS MULTIMODALES (VISIÓN) ---
+    "Llama 3.2 90B (Análisis profundo de imágenes)": "llama-3.2-90b-vision-preview",
+    "Llama 3.2 11B (Análisis rápido de imágenes)": "llama-3.2-11b-vision-preview",
+    
+    # 🎨 --- MODELO DE CREACIÓN (Usa Hugging Face) ---
+    "FLUX.1 [schnell] (Crear imágenes desde texto)": "generador_imagenes" # <--- ID ESPECIAL
 }
 
 st.sidebar.divider()
@@ -82,6 +96,15 @@ modelo_nombre = st.sidebar.selectbox(
 
 # Obtenemos el ID técnico para la API
 modelo_actual = modelos_disponibles[modelo_nombre]
+
+# Pequeña alerta visual si el usuario elige un modelo de visión
+if "Análisis" in modelo_nombre:
+    st.sidebar.info("📷 Has seleccionado un modelo de Visión. ¡Asegúrate de subir una imagen para aprovecharlo!")
+else:
+    st.sidebar.caption("Modelo de texto puro seleccionado.")
+# Info visual
+if "FLUX" in modelo_nombre:
+    st.sidebar.info("🎨 Has seleccionado el Generador de Imágenes. MarioGPT creará una imagen basada en lo que escribas.")
 
 # --- SIDEBAR ARCHIVOS ---
 with st.sidebar:
@@ -146,56 +169,79 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
             base_system_prompt += f"\n\n{st.session_state.file_context}"
 
         try:
-            # 1. EJECUTAR LA BÚSQUEDA (Aquí usas tu función)
-            with st.status("🌐 Buscando información actualizada...", expanded=False) as status:
-                informacion_web = buscar_en_internet(prompt) # 👈 Llamas a tu función
-                status.update(label="✅ Información web obtenida", state="complete")
+            if modelo_actual == "generador_imagenes":
+            # --- CASO A: GENERAR IMAGEN (Hugging Face) ---
+                with st.status("🎨 Dibujando tu imagen con FLUX.1...", expanded=True) as status:
+                    try:
+                        imagen_bytes = generar_imagen(prompt) # Llamamos a la función
+                    
+                        # Convertimos bytes a imagen de PIL para mostrarla
+                        imagen_pil = Image.open(io.BytesIO(imagen_bytes))
+                    
+                        # Mostramos la imagen directamente en el chat
+                        st.image(imagen_pil, caption=f"Imagen generada para: '{prompt}'", use_container_width=True)
+                    
+                        status.update(label="✅ Imagen generada correctamente", state="complete")
+                    
+                        # Guardamos un mensaje especial en el historial (o los bytes codificados, pero ocupa mucho)
+                        full_response = f"[Imagen generada para: {prompt}]"
 
-            # 2. PREPARAR LOS MENSAJES (El "Contexto")
-            # Empezamos con el prompt de sistema y la info de internet
-            messages_to_send = [
-                {"role": "system", "content": base_system_prompt},
-                {"role": "system", "content": f"DATOS DE INTERNET ACTUALIZADOS:\n{informacion_web}"}
-            ]
-            # 🔥 FILTRAR MENSAJES ANTES DE ENVIAR
-            valid_messages = [
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-                if m["content"] and m["content"].strip() != ""
-            ]
+                    except Exception as img_e:
+                        st.error(f"Hubo un error con la API de imágenes. Puede que esté saturada: {img_e}")
+                        full_response = "Error al generar la imagen."
 
-            # 1. Preparamos una lista única para enviar a la API
-            #messages_to_send = [
-            #    {"role": "system", "content": base_system_prompt}
-            #]
-
-            # 2. Aplicamos la lógica del límite de memoria (ej. 30 mensajes)
-            if len(valid_messages) > 30:
-                resumen = "Resumen: el usuario ha estado hablando sobre diversos temas en el pasado."
-                messages_to_send.append({"role": "system", "content": resumen})
-                messages_to_send.extend(valid_messages[-30:]) # Solo recordamos los últimos 30
             else:
-                messages_to_send.extend(valid_messages) # Recordamos todo el historial corto
 
-            # 3. Enviamos la variable correcta a Groq
-            completion = client.chat.completions.create(
-                messages=messages_to_send, #AHORA SÍ ENVIAMOS EL CONTEXTO CORRECTO
-                model=modelo_actual, # El modelo seleccionado dinámicamente
-                stream=True,
-            )
+                # 1. EJECUTAR LA BÚSQUEDA (Aquí usas tu función)
+                with st.status("🌐 Buscando información actualizada...", expanded=False) as status:
+                    informacion_web = buscar_en_internet(prompt) # 👈 Llamas a tu función
+                    status.update(label="✅ Información web obtenida", state="complete")
 
-            for chunk in completion:
-                content = chunk.choices[0].delta.content
-                if content:
-                    full_response += content
-                    response_placeholder.markdown(full_response + "▌")
+                # 2. PREPARAR LOS MENSAJES (El "Contexto")
+                # Empezamos con el prompt de sistema y la info de internet
+                messages_to_send = [
+                    {"role": "system", "content": base_system_prompt},
+                    {"role": "system", "content": f"DATOS DE INTERNET ACTUALIZADOS:\n{informacion_web}"}
+                ]
+                # 🔥 FILTRAR MENSAJES ANTES DE ENVIAR
+                valid_messages = [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages
+                    if m["content"] and m["content"].strip() != ""
+                ]
 
-            response_placeholder.markdown(full_response)
+                # 1. Preparamos una lista única para enviar a la API
+                #messages_to_send = [
+                #    {"role": "system", "content": base_system_prompt}
+                #]
 
-            #Mostrar contexto
-            #st.write(len(valid_messages))
-            #st.write(valid_messages[:2])  # primeros mensajes
-            #st.write(valid_messages[-2:]) # últimos mensajes
+                # 2. Aplicamos la lógica del límite de memoria (ej. 30 mensajes)
+                if len(valid_messages) > 30:
+                    resumen = "Resumen: el usuario ha estado hablando sobre diversos temas en el pasado."
+                    messages_to_send.append({"role": "system", "content": resumen})
+                    messages_to_send.extend(valid_messages[-30:]) # Solo recordamos los últimos 30
+                else:
+                    messages_to_send.extend(valid_messages) # Recordamos todo el historial corto
+
+                # 3. Enviamos la variable correcta a Groq
+                completion = client.chat.completions.create(
+                    messages=messages_to_send, #AHORA SÍ ENVIAMOS EL CONTEXTO CORRECTO
+                    model=modelo_actual, # El modelo seleccionado dinámicamente
+                    stream=True,
+                )
+
+                for chunk in completion:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        full_response += content
+                        response_placeholder.markdown(full_response + "▌")
+
+                response_placeholder.markdown(full_response)
+
+                #Mostrar contexto
+                #st.write(len(valid_messages))
+                #st.write(valid_messages[:2])  # primeros mensajes
+                #st.write(valid_messages[-2:]) # últimos mensajes
             # GUARDAR RESPUESTA
             if full_response and full_response.strip():
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
