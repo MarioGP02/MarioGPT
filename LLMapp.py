@@ -68,7 +68,7 @@ with st.sidebar.expander("🔐 Cuenta y Acceso", expanded=auth_expanded):
                 st.success("✅ ¡Contraseña actualizada con éxito!")
             except Exception as e:
                 st.error(f"Error al actualizar: {e}")
-                
+        # Logout       
         st.divider()
         if st.button("Cerrar sesión"):
             st.session_state.user = None
@@ -76,14 +76,6 @@ with st.sidebar.expander("🔐 Cuenta y Acceso", expanded=auth_expanded):
             if "messages_loaded" in st.session_state:
                 del st.session_state.messages_loaded
             st.rerun()
-
-# Logout
-if st.session_state.user:
-    if st.sidebar.button("Cerrar sesión"):
-        st.session_state.user = None
-        st.session_state.messages = []
-        if "messages_loaded" in st.session_state:
-            del st.session_state.messages_loaded
 
 # Bloquear acceso
 if not st.session_state.user:
