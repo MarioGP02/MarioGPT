@@ -18,28 +18,64 @@ if "user" not in st.session_state:
 # Si el usuario no está logueado, lo dejamos abierto por defecto. Si ya entró, lo cerramos.
 auth_expanded = True if not st.session_state.user else False
 
-with st.sidebar.expander("🔐 Cuenta", expanded=auth_expanded):
-    mode = st.selectbox("Acceso", ["Login", "Registro"])
-    email = st.text_input("Email")
-    password = st.text_input("Contraseña", type="password")
+with st.sidebar.expander("🔐 Cuenta y Acceso", expanded=auth_expanded):
+    if not st.session_state.user:
+        # Añadimos "Recuperar" a las opciones
+        mode = st.selectbox("Acceso", ["Login", "Registro", "Recuperar contraseña"])
+        
+        email = st.text_input("Email")
+        
+        # Ocultamos el campo de contraseña si solo quiere recuperar la cuenta
+        if mode != "Recuperar contraseña":
+            password = st.text_input("Contraseña", type="password")
 
-    if mode == "Registro":
-        if st.button("Crear cuenta"):
-            res = register(email, password)
-            if res.user:
-                st.success("Cuenta creada")
-            else:
-                st.error("Error")
-
-    elif mode == "Login":
-        if st.button("Entrar"):
-            try:
-                res = login(email, password)
+        if mode == "Registro":
+            if st.button("Crear cuenta"):
+                res = register(email, password)
                 if res.user:
-                    st.session_state.user = res.user
-                    st.success("Login correcto")
+                    st.success("Cuenta creada. ¡Ya puedes entrar!")
+                else:
+                    st.error("Error al crear cuenta")
+
+        elif mode == "Login":
+            if st.button("Entrar"):
+                try:
+                    res = login(email, password)
+                    if res.user:
+                        st.session_state.user = res.user
+                        st.success("Login correcto")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error de credenciales. ¿Te has equivocado?")
+                    
+        elif mode == "Recuperar contraseña":
+            if st.button("Enviar enlace de recuperación"):
+                try:
+                    # Llamamos a la nueva función
+                    enviar_recuperacion(email)
+                    st.success("📩 Revisa tu correo. Te hemos enviado un enlace para cambiar tu contraseña.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+    else:
+        st.write(f"Conectado como: **{st.session_state.user.email}**")
+        
+        # --- NUEVO: FORMULARIO PARA CAMBIAR CONTRASEÑA ---
+        st.divider()
+        nueva_pass = st.text_input("Nueva contraseña", type="password", key="new_pass")
+        if st.button("Actualizar contraseña"):
+            try:
+                actualizar_contraseña(nueva_pass)
+                st.success("✅ ¡Contraseña actualizada con éxito!")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error al actualizar: {e}")
+                
+        st.divider()
+        if st.button("Cerrar sesión"):
+            st.session_state.user = None
+            st.session_state.messages = []
+            if "messages_loaded" in st.session_state:
+                del st.session_state.messages_loaded
+            st.rerun()
 
 # Logout
 if st.session_state.user:

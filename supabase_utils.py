@@ -20,6 +20,19 @@ def register(email, password):
         "password": password
     })
 
+# ---------------- RECOVERY ---------------- #
+
+def enviar_recuperacion(email):
+    # Supabase enviará un email con un enlace a este usuario
+    # Requiere que el usuario exista en la base de datos
+    return supabase.auth.reset_password_for_email(email)
+
+def actualizar_contraseña(nueva_contraseña):
+    # Esto actualiza la contraseña del usuario que está actualmente logueado
+    return supabase.auth.update_user({
+        "password": nueva_contraseña
+    })
+
 # ---------------- DB ---------------- #
 
 def save_message(user_id, role, content):
