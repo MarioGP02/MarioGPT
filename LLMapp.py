@@ -15,28 +15,31 @@ st.title("🤖 MarioGPT con Llama 3.1 8b instant")
 if "user" not in st.session_state:
     st.session_state.user = None
 
-st.sidebar.title("🔐 Cuenta")
-mode = st.sidebar.selectbox("Acceso", ["Login", "Registro"])
-email = st.sidebar.text_input("Email")
-password = st.sidebar.text_input("Contraseña", type="password")
+# Si el usuario no está logueado, lo dejamos abierto por defecto. Si ya entró, lo cerramos.
+auth_expanded = True if not st.session_state.user else False
 
-if mode == "Registro":
-    if st.sidebar.button("Crear cuenta"):
-        res = register(email, password)
-        if res.user:
-            st.sidebar.success("Cuenta creada")
-        else:
-            st.sidebar.error("Error")
+with st.sidebar.expander("🔐 Cuenta", expanded=auth_expanded):
+    mode = st.selectbox("Acceso", ["Login", "Registro"])
+    email = st.text_input("Email")
+    password = st.text_input("Contraseña", type="password")
 
-elif mode == "Login":
-    if st.sidebar.button("Entrar"):
-        try:
-            res = login(email, password)
+    if mode == "Registro":
+        if st.button("Crear cuenta"):
+            res = register(email, password)
             if res.user:
-                st.session_state.user = res.user
-                st.sidebar.success("Login correcto")
-        except Exception as e:
-            st.sidebar.error(f"Error: {e}")
+                st.success("Cuenta creada")
+            else:
+                st.error("Error")
+
+    elif mode == "Login":
+        if st.button("Entrar"):
+            try:
+                res = login(email, password)
+                if res.user:
+                    st.session_state.user = res.user
+                    st.success("Login correcto")
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 # Logout
 if st.session_state.user:
@@ -107,8 +110,7 @@ if "FLUX" in modelo_nombre:
     st.sidebar.info("🎨 Has seleccionado el Generador de Imágenes. MarioGPT creará una imagen basada en lo que escribas.")
 
 # --- SIDEBAR ARCHIVOS ---
-with st.sidebar:
-    st.header("📂 Análisis de Documentos")
+with st.sidebar.expander("📂 Análisis de Documentos", expanded=False):
     uploaded_file = st.file_uploader("Soporta: TXT, PDF", type=["txt", "pdf"])
 
     if uploaded_file:
