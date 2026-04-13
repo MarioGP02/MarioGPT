@@ -4,12 +4,13 @@ import PyPDF2
 import io
 from PIL import Image
 import requests
+import base64
 from supabase_utils import *
 from tavily_utils import *
 from imagenes_utils import *
 
 st.set_page_config(page_title="MarioGPT", page_icon="🤖")
-st.title("🤖 MarioGPT con Llama 3.1 8b instant")
+st.title("🤖 MarioGPT")
 
 # --- AUTH ---
 if "user" not in st.session_state:
@@ -92,6 +93,9 @@ if "messages" not in st.session_state:
 if "file_context" not in st.session_state:
     st.session_state.file_context = ""
 
+if "image_context" not in st.session_state:
+    st.session_state.image_context = None
+
 # --- CARGAR HISTORIAL ---
 if "last_user_id" not in st.session_state or st.session_state.last_user_id != st.session_state.user.id:
     st.session_state.messages = load_messages(st.session_state.user.id)
@@ -138,24 +142,45 @@ if "FLUX" in modelo_nombre:
     st.sidebar.info("🎨 Has seleccionado el Generador de Imágenes. MarioGPT creará una imagen basada en lo que escribas.")
 
 # --- SIDEBAR ARCHIVOS ---
-with st.sidebar.expander("📂 Análisis de Documentos", expanded=False):
-    uploaded_file = st.file_uploader("Soporta: TXT, PDF", type=["txt", "pdf"])
+with st.sidebar.expander("📂 Análisis de Documentos e Imágenes", expanded=False):
+    uploaded_file = st.file_uploader("Soporta: TXT, PDF, JPG, PNG, JPEG", type=["txt", "pdf", "jpg", "jpeg", "png"])
 
     if uploaded_file:
-        text_content = ""
-        if uploaded_file.name.endswith(".pdf"):
+        # Reiniciamos contextos por si cambia de archivo
+        st.session_state.file_context = ""
+        st.session_state.image_context = None
+
+        # Si es una IMAGEN
+        if uploaded_file.name.lower().endswith((".jpg", ".jpeg", ".png")):
+            image_bytes = uploaded_file.getvalue()
+            base64_image = base64.b64encode(image_bytes).decode("utf-8")
+            mime_type = uploaded_file.type
+            
+            # Guardamos la imagen en el formato que exige Groq/OpenAI
+            st.session_state.image_context = f"data:{mime_type};base64,{base64_image}"
+            
+            st.sidebar.image(uploaded_file, caption="Imagen lista para analizar", use_container_width=True)
+            st.success("¡Imagen procesada! Recuerda usar un modelo de Visión.")
+
+        # Si es un PDF
+        elif uploaded_file.name.endswith(".pdf"):
             pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            text_content = ""
             for page in pdf_reader.pages:
                 extracted = page.extract_text()
                 if extracted:
                     text_content += extracted
+            st.session_state.file_context = text_content[:20000]
+            st.success("Archivo PDF procesado")
+
+        # Si es un TXT
         else:
             text_content = uploaded_file.getvalue().decode("utf-8")
-
-        st.session_state.file_context = text_content[:20000]
-        st.success("Archivo procesado")
+            st.session_state.file_context = text_content[:20000]
+            st.success("Archivo TXT procesado")
     else:
         st.session_state.file_context = ""
+        st.session_state.image_context = None
 
 # --- MOSTRAR HISTORIAL ---
 for message in st.session_state.messages:
@@ -267,6 +292,23 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
                     messages_to_send.extend(valid_messages[-30:]) # Solo recordamos los últimos 30
                 else:
                     messages_to_send.extend(valid_messages) # Recordamos todo el historial corto
+
+                # Comprobamos si el modelo seleccionado soporta visión y si hay una imagen subida
+                if "vision" in modelo_actual and st.session_state.image_context:
+                    # Recorremos la lista al revés para encontrar el mensaje más reciente del usuario
+                    for i in range(len(messages_to_send) - 1, -1, -1):
+                        if messages_to_send[i]["role"] == "user":
+                            texto_original = messages_to_send[i]["content"]
+                            messages_to_send[i]["content"] = [
+                                {"type": "text", "text": texto_original},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": st.session_state.image_context
+                                    }
+                                }
+                            ]
+                            break
 
                 # 3. Enviamos la variable correcta a Groq
                 completion = client.chat.completions.create(
