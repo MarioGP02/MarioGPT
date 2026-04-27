@@ -8,6 +8,7 @@ import base64
 from supabase_utils import *
 from tavily_utils import *
 from imagenes_utils import *
+from marioGPT_core import *
 
 st.set_page_config(page_title="MarioGPT", page_icon="🤖")
 st.title("🤖 MarioGPT")
@@ -96,7 +97,31 @@ if "file_context" not in st.session_state:
 if "image_context" not in st.session_state:
     st.session_state.image_context = None
 
-# --- CARGAR HISTORIAL ---
+# --- CARGAR HISTORIAL Y CARGAR MODELO MarioGPT---
+@st.cache_resource(show_spinner="Cargando cerebro de MarioGPT...")
+def cargar_mariogpt_local():
+    device = 'cpu'
+    # Importante: Asegúrate que MarioLLM esté definido en marioGPT_core.py
+    model = MarioLLM() 
+    
+    # Cargar pesos
+    try:
+        checkpoint = torch.load('LLMarioGPTitan_V3.pth', map_location=device)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            model.load_state_dict(checkpoint)
+        
+        model.to(device)
+        model.eval()
+        enc = tiktoken.get_encoding("gpt2")
+        return model, enc, device
+    except FileNotFoundError:
+        st.error("⚠️ No se encontró el archivo 'LLMarioGPTitan_V3.pth'. ¡Súbelo a la carpeta del proyecto!")
+        return None, None, None
+
+
+
 if "last_user_id" not in st.session_state or st.session_state.last_user_id != st.session_state.user.id:
     st.session_state.messages = load_messages(st.session_state.user.id)
     st.session_state.last_user_id = st.session_state.user.id
@@ -106,6 +131,7 @@ if "last_user_id" not in st.session_state or st.session_state.last_user_id != st
 # Diccionario de modelos disponibles en Groq
 modelos_disponibles = {
     # 📝 --- MODELOS DE TEXTO PÚRO Y RAZONAMIENTO ---
+    "MarioGPT 3.0(Local, sin conexión)": "mariogpt_local", # <--- ID ESPECIAL para usar tu modelo local
     "Llama 3.3 70B (Máxima Inteligencia)": "llama-3.3-70b-versatile",
     "Llama 3.1 8B (Rápido y eficaz)": "llama-3.1-8b-instant",
     "Mixtral 8x7B (Equilibrado/Contexto largo)": "mixtral-8x7b-32768",
@@ -259,6 +285,54 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
                 if not exito:
                     st.error("Lo siento, el modelo tardó demasiado en responder. Prueba de nuevo en unos segundos.")
                     full_response = "Error por tiempo de espera agotado."
+
+            elif modelo_actual == "mariogpt_local":
+                with st.status("🧠 MarioGPT revisando su memoria...", expanded=True) as status:
+                    modelo_local, enc_local, device_local = cargar_mariogpt_local()
+                    
+                    # --- CONSTRUCCIÓN DE LA MEMORIA ---
+                    # Formateamos los últimos mensajes para que el modelo entienda el contexto
+                    # Usamos solo los últimos 4-6 mensajes para no saturar los 512 tokens del modelo
+                    contexto_memoria = ""
+                    for m in st.session_state.messages[-6:]:
+                        role_label = "Usuario" if m["role"] == "user" else "Asistente"
+                        contexto_memoria += f"{role_label}: {m['content']}\n"
+                    
+                    # Añadimos el pie final para forzar la respuesta
+                    texto_entrada = f"{contexto_memoria}Asistente:"
+                    
+                    # Tokenizamos y verificamos que no exceda el límite del modelo (512)
+                    tokens = enc_local.encode(texto_entrada)
+                    
+                    # Si el historial es muy largo, recortamos por la izquierda (lo más antiguo)
+                    # Dejamos margen para que el modelo genere al menos 150 tokens nuevos
+                    limite_tokens = 512 - 150 
+                    if len(tokens) > limite_tokens:
+                        tokens = tokens[-limite_tokens:]
+                        
+                    context_tensor = torch.tensor(tokens, dtype=torch.long, device=device_local).unsqueeze(0)
+                    
+                    status.update(label="Escribiendo respuesta basada en el historial...", state="running")
+                    
+                    # --- GENERACIÓN ---
+                    with torch.no_grad():
+                        generado_idx = modelo_local.generate(
+                            context_tensor, 
+                            max_new_tokens=150, 
+                            temperature=0.8, 
+                            top_p=0.85
+                        )[0].tolist()
+                    
+                    # Decodificamos y extraemos SOLO lo que el modelo ha escrito nuevo
+                    respuesta_total = enc_local.decode(generado_idx)
+                    # Buscamos dónde termina el prompt de entrada para quedarnos solo con la respuesta
+                    full_response = respuesta_total[len(enc_local.decode(tokens)):].strip()
+                    
+                    # Limpieza por si el modelo genera "Usuario:" en su respuesta (típico en modelos pequeños)
+                    full_response = full_response.split("Usuario:")[0].split("Asistente:")[0].strip()
+                    
+                    response_placeholder.markdown(full_response)
+                    status.update(label="✅ Memoria procesada con éxito", state="complete")
 
             else:
 

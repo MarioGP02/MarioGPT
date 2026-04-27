@@ -5,3 +5,5 @@ Supabase
 Tavily
 Pillow
 requests
+torch
+tiktoken
