@@ -5,6 +5,7 @@ import io
 from PIL import Image
 import requests
 import base64
+from huggingface_hub import hf_hub_download
 from supabase_utils import *
 from tavily_utils import *
 from imagenes_utils import *
@@ -100,9 +101,12 @@ if "image_context" not in st.session_state:
 # --- CARGAR HISTORIAL Y CARGAR MODELO MarioGPT---
 @st.cache_resource(show_spinner="Cargando cerebro de MarioGPT...")
 def cargar_mariogpt_local():
+    # Esto descarga el archivo solo la primera vez y lo guarda en caché
+    path_modelo = hf_hub_download(repo_id="MarioGP/MarioGPTitan", filename="LLMarioGPTitan_V3.pth")
+    
     device = 'cpu'
-    # Importante: Asegúrate que MarioLLM esté definido en marioGPT_core.py
-    model = MarioLLM() 
+    model = MarioLLM()
+    checkpoint = torch.load(path_modelo, map_location=device)
     
     # Cargar pesos
     try:
