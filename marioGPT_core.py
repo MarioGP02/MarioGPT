@@ -75,45 +75,44 @@ class MarioLLM(nn.Module):
         x = self.ln_f(x)
         return self.lm_head(x)
 
-    def generate(self, idx, max_new_tokens, temperature=0.85, top_p=0.8, repetition_penalty=1.5):
+    def generate(self, idx, max_new_tokens, temperature=0.7, top_p=0.8, top_k=40, repetition_penalty=1.3):
         self.eval()
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -block_size:]
             with torch.no_grad():
                 logits = self(idx_cond)
-        
-            # Enfocamos el último set de logits
+            
+            # Bajamos temperatura para Int8: más conservador, menos errores
             logits = logits[:, -1, :] / temperature
-        
-            # --- PENALIZACIÓN DE REPETICIÓN ---
-            # Por cada batch, penalizamos los tokens que ya están en el historial
+
+            # Penalización de repetición agresiva para evitar el "GPT archivo"
             for b in range(logits.size(0)):
-                # Obtenemos los IDs únicos que ya han salido
-                tokens_vistos = set(idx[b].tolist())
-                for token_id in tokens_vistos:
-                    # Si el logit es positivo, lo dividimos por la penalización
-                    # Si es negativo, lo multiplicamos (lo hace aún más improbable)
+                for token_id in set(idx[b].tolist()):
                     if logits[b, token_id] > 0:
                         logits[b, token_id] /= repetition_penalty
                     else:
                         logits[b, token_id] *= repetition_penalty
 
-            # --- FILTRADO TOP-P (NUCLEUS SAMPLING) ---
+            # Top-K: Filtramos el ruido de la cuantización
+            v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+            logits[logits < v[:, [-1]]] = -float('Inf')
+
+            # Top-P (Nucleus Sampling)
             sorted_logits, sorted_indices = torch.sort(logits, descending=True)
             cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-        
+            
             sorted_indices_to_remove = cumulative_probs > top_p
             sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
             sorted_indices_to_remove[..., 0] = 0
-        
+            
             for b in range(logits.size(0)):
                 indices_to_remove = sorted_indices[b][sorted_indices_to_remove[b]]
                 logits[b, indices_to_remove] = -float('Inf')
-            
+                
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
-        
+            
         return idx
     def decodificar_respuesta(ids_generados, encoder_name="gpt2"):
         """
