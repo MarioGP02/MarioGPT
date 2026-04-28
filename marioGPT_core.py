@@ -94,3 +94,40 @@ class MarioLLM(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
         return idx
+
+    def decodificar_respuesta(ids_generados, encoder_name="gpt2"):
+        """
+        Traduce una secuencia de enteros (tokens) a texto en español.
+    
+        Args:
+            ids_generados (torch.Tensor o list): Los tokens de salida del modelo.
+            encoder_name (str): El encoding usado (GPT-2 por defecto para MarioGPT).
+        """
+        #   1. Inicializar el decodificador
+        enc = tiktoken.get_encoding(encoder_name)
+    
+        # 2. Convertir tensor a lista de Python si es necesario
+        if isinstance(ids_generados, torch.Tensor):
+            # Si viene del modelo, suele tener forma [1, tokens]
+            tokens = ids_generados.view(-1).tolist()
+        else:
+            tokens = ids_generados
+
+        # 3. Decodificar de integers a String
+        texto_traducido = enc.decode(tokens)
+    
+        return texto_traducido
+
+    # --- Ejemplo de integración en tu bloque de Streamlit ---
+    def procesar_salida_mario(generado_idx, tokens_entrada, enc_local):
+        # Decodificamos todo el bloque (entrada + generación)
+        respuesta_total = enc_local.decode(generado_idx)
+    
+        # Extraemos solo lo nuevo (lo que no era parte del prompt original)
+        longitud_prompt = len(enc_local.decode(tokens_entrada))
+        full_response = respuesta_total[longitud_prompt:].strip()
+    
+        # Limpieza de "alucinaciones" de roles
+        full_response = full_response.split("Usuario:")[0].split("Asistente:")[0].strip()
+    
+        return full_response

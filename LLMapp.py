@@ -290,52 +290,51 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
 
             elif modelo_actual == "mariogpt_local":
                 with st.status("🧠 MarioGPT revisando su memoria...", expanded=True) as status:
+                    # 1. Carga de recursos
                     modelo_local, enc_local, device_local = cargar_mariogpt_local()
-                    
-                    # --- CONSTRUCCIÓN DE LA MEMORIA ---
-                    # Formateamos los últimos mensajes para que el modelo entienda el contexto
-                    # Usamos solo los últimos 4-6 mensajes para no saturar los 512 tokens del modelo
+        
+                    # 2. Construcción de la memoria (Contexto)
                     contexto_memoria = ""
                     for m in st.session_state.messages[-6:]:
                         role_label = "Usuario" if m["role"] == "user" else "Asistente"
                         contexto_memoria += f"{role_label}: {m['content']}\n"
-                    
-                    # Añadimos el pie final para forzar la respuesta
+        
                     texto_entrada = f"{contexto_memoria}Asistente:"
-                    
-                    # Tokenizamos y verificamos que no exceda el límite del modelo (512)
-                    tokens = enc_local.encode(texto_entrada)
-                    
-                    # Si el historial es muy largo, recortamos por la izquierda (lo más antiguo)
-                    # Dejamos margen para que el modelo genere al menos 150 tokens nuevos
+        
+                    # 3. Tokenización (De Español a Integers)
+                    tokens_input = enc_local.encode(texto_entrada)
+        
+                    # Recorte de seguridad para no exceder los 512 tokens del MarioGPT
                     limite_tokens = 512 - 150 
-                    if len(tokens) > limite_tokens:
-                        tokens = tokens[-limite_tokens:]
-                        
-                    context_tensor = torch.tensor(tokens, dtype=torch.long, device=device_local).unsqueeze(0)
-                    
+                    if len(tokens_input) > limite_tokens:
+                        tokens_input = tokens_input[-limite_tokens:]
+            
+                    context_tensor = torch.tensor(tokens_input, dtype=torch.long, device=device_local).unsqueeze(0)
+        
                     status.update(label="Escribiendo respuesta basada en el historial...", state="running")
-                    
-                    # --- GENERACIÓN ---
+        
+                    # 4. Generación (El modelo produce nuevos Integers)
                     with torch.no_grad():
-                        generado_idx = modelo_local.generate(
+                        generado_idx_completo = modelo_local.generate(
                             context_tensor, 
                             max_new_tokens=150, 
                             temperature=0.8, 
                             top_p=0.85
                         )[0].tolist()
-                    
-                    # Decodificamos y extraemos SOLO lo que el modelo ha escrito nuevo
-                    respuesta_total = enc_local.decode(generado_idx)
-                    # Buscamos dónde termina el prompt de entrada para quedarnos solo con la respuesta
-                    full_response = respuesta_total[len(enc_local.decode(tokens)):].strip()
-                    
-                    # Limpieza por si el modelo genera "Usuario:" en su respuesta (típico en modelos pequeños)
+        
+                    # 5. DECODIFICACIÓN "QUIRÚRGICA" (De Integers a Español)
+                    # En lugar de decodificar todo y cortar el texto, cortamos la lista de números primero.
+                   # Esto es más eficiente y evita errores con espacios en blanco.
+                    tokens_nuevos = generado_idx_completo[len(tokens_input):]
+                    full_response = enc_local.decode(tokens_nuevos).strip()
+        
+                    # 6. Limpieza final de alucinaciones
+                    # Si el modelo intenta seguir la conversación solo, cortamos por lo sano.
                     full_response = full_response.split("Usuario:")[0].split("Asistente:")[0].strip()
-                    
+        
+                    # 7. Renderizado en la App
                     response_placeholder.markdown(full_response)
                     status.update(label="✅ Memoria procesada con éxito", state="complete")
-
             else:
 
                 # 1. EJECUTAR LA BÚSQUEDA (Aquí usas tu función)
