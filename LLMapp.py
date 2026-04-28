@@ -101,7 +101,7 @@ if "image_context" not in st.session_state:
 # --- CARGAR HISTORIAL Y CARGAR MODELO MarioGPT---
 @st.cache_resource(show_spinner="Cargando cerebro de MarioGPT...")
 def cargar_mariogpt_local():
-    path_modelo = hf_hub_download(repo_id="TU_USUARIO/TU_REPO", filename="MarioGPTitan_Int8.pth")
+    path_modelo = hf_hub_download(repo_id="MarioGP/MarioGPTitan", filename="MarioGPTitan_Int8.pth")
     
     # 1. Instanciamos el modelo normal
     model_base = MarioLLM()
