@@ -101,28 +101,26 @@ if "image_context" not in st.session_state:
 # --- CARGAR HISTORIAL Y CARGAR MODELO MarioGPT---
 @st.cache_resource(show_spinner="Cargando cerebro de MarioGPT...")
 def cargar_mariogpt_local():
-    # Esto descarga el archivo solo la primera vez y lo guarda en caché
-    path_modelo = hf_hub_download(repo_id="MarioGP/MarioGPTitan", filename="LLMarioGPTitan_V3.pth")
+    path_modelo = hf_hub_download(repo_id="TU_USUARIO/TU_REPO", filename="MarioGPTitan_Int8.pth")
     
-    device = 'cpu'
-    model = MarioLLM()
-    checkpoint = torch.load(path_modelo, map_location=device)
+    # 1. Instanciamos el modelo normal
+    model_base = MarioLLM()
     
-    # Cargar pesos
-    try:
-        checkpoint = torch.load('LLMarioGPTitan_V3.pth', map_location=device)
-        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'])
-        else:
-            model.load_state_dict(checkpoint)
-        
-        model.to(device)
-        model.eval()
-        enc = tiktoken.get_encoding("gpt2")
-        return model, enc, device
-    except FileNotFoundError:
-        st.error("⚠️ No se encontró el archivo 'LLMarioGPTitan_V3.pth'. ¡Súbelo a la carpeta del proyecto!")
-        return None, None, None
+    # 2. Aplicamos la cuantización DINÁMICA al modelo vacío 
+    # (Esto crea la estructura necesaria para los pesos Int8)
+    model_quantized = torch.quantization.quantize_dynamic(
+        model_base, 
+        {torch.nn.Linear}, 
+        dtype=torch.qint8
+    )
+    
+    # 3. Cargamos los pesos comprimidos
+    state_dict = torch.load(path_modelo, map_location='cpu')
+    model_quantized.load_state_dict(state_dict)
+    model_quantized.eval()
+    
+    enc = tiktoken.get_encoding("gpt2")
+    return model_quantized, enc, 'cpu'
 
 
 
