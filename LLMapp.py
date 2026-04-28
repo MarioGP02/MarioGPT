@@ -318,8 +318,8 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
                         generado_idx_completo = modelo_local.generate(
                             context_tensor, 
                             max_new_tokens=150, 
-                            temperature=0.8, 
-                            top_p=0.85
+                            temperature=1.0, 
+                            top_p=0.6
                         )[0].tolist()
         
                     # 5. DECODIFICACIÓN "QUIRÚRGICA" (De Integers a Español)
