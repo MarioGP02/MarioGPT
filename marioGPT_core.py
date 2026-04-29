@@ -77,76 +77,75 @@ class MarioLLM(nn.Module):
 
     def generate(self, idx, max_new_tokens, temperature=0.7, top_p=0.8, top_k=40, repetition_penalty=1.3):
         self.eval()
+
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -block_size:]
+
             with torch.no_grad():
                 logits = self(idx_cond)
-            
-            # Bajamos temperatura para Int8: más conservador, menos errores
+
             logits = logits[:, -1, :] / temperature
 
-            # Penalización de repetición agresiva para evitar el "GPT archivo"
+            # Penalización de repetición
             for b in range(logits.size(0)):
-                for token_id in set(idx[b].tolist()):
+                seen_tokens = idx[b].tolist()
+                for token_id in set(seen_tokens):
                     if logits[b, token_id] > 0:
                         logits[b, token_id] /= repetition_penalty
                     else:
                         logits[b, token_id] *= repetition_penalty
 
-            # Top-K: Filtramos el ruido de la cuantización
+            # Top-K
             v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
             logits[logits < v[:, [-1]]] = -float('Inf')
 
-            # Top-P (Nucleus Sampling)
+            # Top-P
             sorted_logits, sorted_indices = torch.sort(logits, descending=True)
             cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
-            
+
             sorted_indices_to_remove = cumulative_probs > top_p
             sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
             sorted_indices_to_remove[..., 0] = 0
-            
+
             for b in range(logits.size(0)):
                 indices_to_remove = sorted_indices[b][sorted_indices_to_remove[b]]
                 logits[b, indices_to_remove] = -float('Inf')
-                
+
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
+
             idx = torch.cat((idx, idx_next), dim=1)
-            
+
         return idx
     def decodificar_respuesta(ids_generados, encoder_name="gpt2"):
-        """
-        Traduce una secuencia de enteros (tokens) a texto en español.
-    
-        Args:
-            ids_generados (torch.Tensor o list): Los tokens de salida del modelo.
-            encoder_name (str): El encoding usado (GPT-2 por defecto para MarioGPT).
-        """
-        #   1. Inicializar el decodificador
+
         enc = tiktoken.get_encoding(encoder_name)
-    
-        # 2. Convertir tensor a lista de Python si es necesario
+
+        # 🔥 FIX: asegurar lista
         if isinstance(ids_generados, torch.Tensor):
-            # Si viene del modelo, suele tener forma [1, tokens]
             tokens = ids_generados.view(-1).tolist()
         else:
             tokens = ids_generados
 
-        # 3. Decodificar de integers a String
         texto_traducido = enc.decode(tokens)
-    
+
         return texto_traducido
 
     # --- Ejemplo de integración en tu bloque de Streamlit ---
     def procesar_salida_mario(generado_idx, tokens_entrada, enc_local):
-        # Decodificamos todo el bloque (entrada + generación)
+
+        # 🔥 FIX: asegurar lista
+        if isinstance(generado_idx, torch.Tensor):
+            generado_idx = generado_idx.view(-1).tolist()
+
+        if isinstance(tokens_entrada, torch.Tensor):
+            tokens_entrada = tokens_entrada.tolist()
+
         respuesta_total = enc_local.decode(generado_idx)
-    
-        # Extraemos solo lo nuevo (lo que no era parte del prompt original)
+
         longitud_prompt = len(enc_local.decode(tokens_entrada))
         full_response = respuesta_total[longitud_prompt:].strip()
-    
-        # Limpieza de "alucinaciones" de roles
+
         full_response = full_response.split("Usuario:")[0].split("Asistente:")[0].strip()
-    
+
         return full_response

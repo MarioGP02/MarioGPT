@@ -128,7 +128,6 @@ def cargar_mariogpt_local():
     return model, enc, 'cpu'
 
 
-
 if "last_user_id" not in st.session_state or st.session_state.last_user_id != st.session_state.user.id:
     st.session_state.messages = load_messages(st.session_state.user.id)
     st.session_state.last_user_id = st.session_state.user.id
@@ -295,30 +294,35 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
 
             elif modelo_actual == "mariogpt_local":
                 with st.status("🧠 MarioGPT revisando su memoria...", expanded=True) as status:
+
                     # 1. Carga de recursos
                     modelo_local, enc_local, device_local = cargar_mariogpt_local()
-        
+
                     # 2. Construcción de la memoria (Contexto)
                     contexto_memoria = ""
                     for m in st.session_state.messages[-6:]:
                         role_label = "Usuario" if m["role"] == "user" else "Asistente"
                         contexto_memoria += f"{role_label}: {m['content']}\n"
-        
+
                     texto_entrada = f"{contexto_memoria}Asistente:"
-        
-                    # 3. Tokenización (De Español a Integers)
+
+                    # 3. Tokenización
                     tokens_input = enc_local.encode(texto_entrada)
-        
-                    # Recorte de seguridad para no exceder los 512 tokens del MarioGPT
+
+                    # Recorte de seguridad
                     limite_tokens = 512 - 150 
                     if len(tokens_input) > limite_tokens:
                         tokens_input = tokens_input[-limite_tokens:]
-            
-                    context_tensor = torch.tensor(tokens_input, dtype=torch.long, device=device_local).unsqueeze(0)
-        
+
+                    context_tensor = torch.tensor(
+                        tokens_input,
+                        dtype=torch.long,
+                        device=device_local
+                    ).unsqueeze(0)
+
                     status.update(label="Escribiendo respuesta basada en el historial...", state="running")
-        
-                    # 4. Generación (El modelo produce nuevos Integers)
+
+                    # 4. Generación
                     with torch.no_grad():
                         generado_idx_completo = modelo_local.generate(
                             context_tensor, 
@@ -328,18 +332,15 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
                             top_k=50,
                             repetition_penalty=1.2
                         )
-        
-                    # 5. DECODIFICACIÓN "QUIRÚRGICA" (De Integers a Español)
-                    # En lugar de decodificar todo y cortar el texto, cortamos la lista de números primero.
-                   # Esto es más eficiente y evita errores con espacios en blanco.
-                    tokens_nuevos = generado_idx_completo[len(tokens_input):]
+
+                    # 5. DECODIFICACIÓN CORREGIDA (🔥 FIX CLAVE)
+                    tokens_nuevos = generado_idx_completo[0, len(tokens_input):].tolist()
                     full_response = enc_local.decode(tokens_nuevos).strip()
-        
-                    # 6. Limpieza final de alucinaciones
-                    # Si el modelo intenta seguir la conversación solo, cortamos por lo sano.
+
+                    # 6. Limpieza final
                     full_response = full_response.split("Usuario:")[0].split("Asistente:")[0].strip()
-        
-                    # 7. Renderizado en la App
+
+                    # 7. Renderizado
                     response_placeholder.markdown(full_response)
                     status.update(label="✅ Memoria procesada con éxito", state="complete")
             else:
