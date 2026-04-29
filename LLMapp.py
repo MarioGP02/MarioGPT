@@ -101,26 +101,31 @@ if "image_context" not in st.session_state:
 # --- CARGAR HISTORIAL Y CARGAR MODELO MarioGPT---
 @st.cache_resource(show_spinner="Cargando cerebro de MarioGPT...")
 def cargar_mariogpt_local():
-    path_modelo = hf_hub_download(repo_id="MarioGP/MarioGPTitan", filename="MarioGPTitan_Int8.pth")
-    
-    # 1. Instanciamos el modelo normal
-    model_base = MarioLLM()
-    
-    # 2. Aplicamos la cuantización DINÁMICA al modelo vacío 
-    # (Esto crea la estructura necesaria para los pesos Int8)
-    model_quantized = torch.quantization.quantize_dynamic(
-        model_base, 
-        {torch.nn.Linear}, 
-        dtype=torch.qint8
+
+    # 🔽 Descarga desde Hugging Face (sube tu nuevo modelo ahí)
+    path_modelo = hf_hub_download(
+        repo_id="MarioGP/MarioGPTitan",
+        filename="MarioGPT4_fp16.pth"
     )
-    
-    # 3. Cargamos los pesos comprimidos
+
+    # 1. Instanciar modelo base
+    model = MarioLLM()
+
+    # 2. Cargar pesos FP16
     state_dict = torch.load(path_modelo, map_location='cpu')
-    model_quantized.load_state_dict(state_dict)
-    model_quantized.eval()
-    
+
+    # 🔥 3. Convertir a float32 (CRÍTICO para CPU)
+    for k in state_dict:
+        state_dict[k] = state_dict[k].float()
+
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    # 🔧 Optimización CPU (muy recomendable)
+    torch.set_num_threads(1)
+
     enc = tiktoken.get_encoding("gpt2")
-    return model_quantized, enc, 'cpu'
+    return model, enc, 'cpu'
 
 
 
@@ -133,7 +138,7 @@ if "last_user_id" not in st.session_state or st.session_state.last_user_id != st
 # Diccionario de modelos disponibles en Groq
 modelos_disponibles = {
     # 📝 --- MODELOS DE TEXTO PÚRO Y RAZONAMIENTO ---
-    "MarioGPT 3.0(Local, sin conexión)": "mariogpt_local", # <--- ID ESPECIAL para usar tu modelo local
+    "MarioGPT 4.0(Local, sin conexión)": "mariogpt_local", # <--- ID ESPECIAL para usar tu modelo local
     "Llama 3.3 70B (Máxima Inteligencia)": "llama-3.3-70b-versatile",
     "Llama 3.1 8B (Rápido y eficaz)": "llama-3.1-8b-instant",
     "Mixtral 8x7B (Equilibrado/Contexto largo)": "mixtral-8x7b-32768",
@@ -318,9 +323,11 @@ if prompt := st.chat_input("¿En qué puedo ayudarte hoy?"):
                         generado_idx_completo = modelo_local.generate(
                             context_tensor, 
                             max_new_tokens=150, 
-                            temperature=1.0, 
-                            top_p=0.6
-                        )[0].tolist()
+                            temperature=0.8,
+                            top_p=0.9,
+                            top_k=50,
+                            repetition_penalty=1.2
+                        )
         
                     # 5. DECODIFICACIÓN "QUIRÚRGICA" (De Integers a Español)
                     # En lugar de decodificar todo y cortar el texto, cortamos la lista de números primero.
